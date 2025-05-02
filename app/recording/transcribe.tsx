@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, TextInput, Alert, Platform } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { Play, Pause, Copy, Save, ArrowLeft, Share2 } from 'lucide-react-native';
+import { Play, Pause, Copy, Save, ArrowLeft, Share2, AlertTriangle, Server } from 'lucide-react-native';
 import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system';
 import { useRecordings } from '@/hooks/useRecordings';
@@ -9,6 +9,7 @@ import { colors } from '@/constants/colors';
 import { Button } from '@/components/ui/Button';
 import { transcribeAudio } from '@/utils/transcription';
 import { formatDuration } from '@/utils/formatters';
+import { checkBackendConnection } from '@/lib/trpc';
 
 export default function TranscribeScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -24,6 +25,9 @@ export default function TranscribeScreen() {
   const [playbackPosition, setPlaybackPosition] = useState(0);
   const [duration, setDuration] = useState(0);
   const [audioLoadError, setAudioLoadError] = useState<string | null>(null);
+  const [transcriptionError, setTranscriptionError] = useState<string | null>(null);
+  const [networkError, setNetworkError] = useState<boolean>(false);
+  const [backendStatus, setBackendStatus] = useState<'checking' | 'online' | 'offline'>('checking');
   
   const soundRef = useRef<Audio.Sound | null>(null);
   
@@ -37,6 +41,9 @@ export default function TranscribeScreen() {
       }
     }
     
+    // Check backend connection
+    checkBackendStatus();
+    
     return () => {
       if (soundRef.current) {
         soundRef.current.unloadAsync();
@@ -49,6 +56,12 @@ export default function TranscribeScreen() {
       loadAudio();
     }
   }, [recording]);
+  
+  const checkBackendStatus = async () => {
+    setBackendStatus('checking');
+    const isOnline = await checkBackendConnection();
+    setBackendStatus(isOnline ? 'online' : 'offline');
+  };
   
   const loadAudio = async () => {
     try {
@@ -134,9 +147,22 @@ export default function TranscribeScreen() {
     if (!recording) return;
     
     setIsTranscribing(true);
+    setTranscriptionError(null);
+    setNetworkError(false);
     
     try {
-      const result = await transcribeAudio(recording.uri);
+      console.log('Starting transcription for recording:', recording.id);
+      
+      // Check backend status before attempting transcription
+      await checkBackendStatus();
+      
+      // Call the transcribeAudio function with the recording URI
+      const result = await transcribeAudio(recording.uri, {
+        language: 'en', // Default to English
+        useMock: backendStatus === 'offline', // Use mock data if backend is offline
+      });
+      
+      console.log('Transcription completed successfully');
       setTranscription(result);
       
       // Save transcription to recording
@@ -146,7 +172,16 @@ export default function TranscribeScreen() {
       });
     } catch (error) {
       console.error('Error transcribing audio:', error);
-      Alert.alert('Error', 'Failed to transcribe audio');
+      setTranscriptionError(error instanceof Error ? error.message : "Failed to transcribe audio");
+      
+      // Check if it's a network error
+      if (error instanceof Error && 
+          (error.message.includes('Network request failed') || 
+           error.message.includes('TRPCClientError'))) {
+        setNetworkError(true);
+      }
+      
+      Alert.alert('Error', 'Failed to transcribe audio. Using fallback transcription.');
     } finally {
       setIsTranscribing(false);
     }
@@ -248,6 +283,44 @@ export default function TranscribeScreen() {
           )}
         </View>
         
+        {/* Backend Status Indicator */}
+        <View style={[
+          styles.backendStatusContainer,
+          backendStatus === 'online' ? styles.backendOnline : 
+          backendStatus === 'offline' ? styles.backendOffline : 
+          styles.backendChecking
+        ]}>
+          <Server size={20} color={
+            backendStatus === 'online' ? '#4CAF50' : 
+            backendStatus === 'offline' ? '#E53935' : 
+            '#FFC107'
+          } />
+          <Text style={styles.backendStatusText}>
+            Backend Server: {
+              backendStatus === 'online' ? 'Online' : 
+              backendStatus === 'offline' ? 'Offline' : 
+              'Checking...'
+            }
+          </Text>
+          {backendStatus === 'offline' && (
+            <TouchableOpacity 
+              style={styles.backendRetryButton}
+              onPress={checkBackendStatus}
+            >
+              <Text style={styles.backendRetryText}>Retry</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        
+        {networkError && (
+          <View style={styles.networkErrorContainer}>
+            <AlertTriangle size={24} color="#E53935" />
+            <Text style={styles.networkErrorText}>
+              Network connection error. Using mock transcription data.
+            </Text>
+          </View>
+        )}
+        
         <View style={styles.transcriptionSection}>
           <View style={styles.transcriptionHeader}>
             <Text style={styles.sectionTitle}>Transcription</Text>
@@ -321,13 +394,48 @@ export default function TranscribeScreen() {
               placeholderTextColor={colors.light.subtext}
             />
           ) : transcription ? (
-            <Text style={styles.transcriptionText}>{transcription}</Text>
+            <View>
+              <Text style={styles.transcriptionText}>{transcription}</Text>
+              {transcriptionError && (
+                <Text style={styles.errorText}>
+                  Note: Using fallback transcription due to an error with the transcription service.
+                </Text>
+              )}
+            </View>
           ) : (
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyText}>No transcription available</Text>
               <Text style={styles.emptySubtext}>
                 Tap the "Transcribe" button to generate a transcription of this recording
               </Text>
+              <View style={styles.debugInfo}>
+                <Text style={styles.debugTitle}>Setup Instructions:</Text>
+                <Text style={styles.debugText}>
+                  1. Create a .env file in the root directory with your OpenAI API key:
+                </Text>
+                <Text style={styles.debugCode}>
+                  OPENAI_API_KEY=your_openai_api_key_here
+                </Text>
+                <Text style={styles.debugText}>
+                  2. Start the backend server in a separate terminal:
+                </Text>
+                <Text style={styles.debugCode}>
+                  npm run start-backend
+                </Text>
+                <Text style={styles.debugText}>
+                  3. Or run both frontend and backend together:
+                </Text>
+                <Text style={styles.debugCode}>
+                  npm run dev
+                </Text>
+                <Text style={styles.debugText}>
+                  Backend Status: {
+                    backendStatus === 'online' ? '✅ Online' : 
+                    backendStatus === 'offline' ? '❌ Offline' : 
+                    '⏳ Checking...'
+                  }
+                </Text>
+              </View>
             </View>
           )}
         </View>
@@ -354,7 +462,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.light.card,
     borderRadius: 12,
     padding: 16,
-    marginBottom: 24,
+    marginBottom: 16,
   },
   playbackInfo: {
     flex: 1,
@@ -386,6 +494,51 @@ const styles = StyleSheet.create({
   retryButtonText: {
     color: '#FFFFFF',
     fontWeight: '600',
+  },
+  backendStatusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+  },
+  backendOnline: {
+    backgroundColor: '#E8F5E9',
+  },
+  backendOffline: {
+    backgroundColor: '#FFEBEE',
+  },
+  backendChecking: {
+    backgroundColor: '#FFF8E1',
+  },
+  backendStatusText: {
+    marginLeft: 8,
+    flex: 1,
+    fontWeight: '500',
+  },
+  backendRetryButton: {
+    backgroundColor: '#E53935',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 4,
+  },
+  backendRetryText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 12,
+  },
+  networkErrorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFEBEE',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+  },
+  networkErrorText: {
+    color: '#C62828',
+    marginLeft: 8,
+    flex: 1,
   },
   transcriptionSection: {
     backgroundColor: colors.light.card,
@@ -469,5 +622,39 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.light.subtext,
     textAlign: 'center',
+    marginBottom: 24,
+  },
+  errorText: {
+    fontSize: 14,
+    color: '#E53935',
+    marginTop: 8,
+    fontStyle: 'italic',
+  },
+  debugInfo: {
+    marginTop: 24,
+    padding: 16,
+    backgroundColor: '#F5F5F5',
+    borderRadius: 8,
+    width: '100%',
+  },
+  debugTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 8,
+  },
+  debugText: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 4,
+  },
+  debugCode: {
+    fontSize: 12,
+    color: '#333',
+    backgroundColor: '#E0E0E0',
+    padding: 8,
+    borderRadius: 4,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    marginBottom: 8,
   },
 });
