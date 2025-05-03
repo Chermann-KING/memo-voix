@@ -6,14 +6,15 @@ import { Platform } from "react-native";
 // Get the base URL for the API
 const getBaseUrl = () => {
   // For mobile development, use the local IP address
+  // On android, use the environment variable if defined, otherwise use the host machine ip
   if (Platform.OS === "android") {
     // Use the actual IP address of the computer for physical Android devices
-    return "http://192.168.35.90:3000";
+    return process.env.BACKEND_URL || "http://10.0.2.2:3000";
   }
-
   if (Platform.OS === "ios") {
     // Use localhost for iOS simulator
-    return "http://localhost:3000";
+    // Use the environment variable if defined, otherwise use localhost
+    return process.env.BACKEND_URL || "http://localhost:3000";
   }
 
   // For web development

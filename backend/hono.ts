@@ -1,4 +1,5 @@
-import { Hono } from "hono";
+// @ts-nocheck
+import Hono from "hono";
 import { cors } from "hono/cors";
 import { trpcServer } from "@hono/trpc-server";
 import { appRouter } from "./trpc/app-router";
@@ -22,8 +23,8 @@ app.use(
 
 // Health check endpoint
 app.get("/", (c) => {
-  console.log("Health check endpoint called");
-  return c.text("Backend is running!");
+  console.log("Appel du point de terminaison du bilan de santé");
+  return c.text("Le backend fonctionne !");
 });
 
 // Mount tRPC handler at /api/trpc

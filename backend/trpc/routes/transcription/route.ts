@@ -9,7 +9,7 @@ import FormData from "form-data";
 
 // Input schema for the transcribe procedure
 const transcribeInputSchema = z.object({
-  audioUri: z.string(),
+  audioFile: z.any(), // Fichier audio à transcrire
   language: z.string().optional(),
   prompt: z.string().optional(),
 });
@@ -21,84 +21,54 @@ export const transcribeProcedure = protectedProcedure
   .input(transcribeInputSchema)
   .mutation(async ({ input, ctx }) => {
     try {
-      console.log("Transcription procedure called with input:", {
-        audioUri: input.audioUri.substring(0, 50) + "...",
-        language: input.language,
-        prompt: input.prompt,
-      });
-
-      // Check if OpenAI API key is available
+      // Vérifier la clé API OpenAI
       if (!ctx.env.OPENAI_API_KEY) {
-        console.error("OpenAI API key not found in environment variables");
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
-          message: "OpenAI API key not configured",
+          message: "Clé API OpenAI non configurée",
         });
       }
 
-      // Initialize OpenAI client
+      // Initialiser le client OpenAI
       const openai = new OpenAI({
         apiKey: ctx.env.OPENAI_API_KEY,
       });
 
-      // Handle different types of audio URIs
-      let audioFile;
-      let tempFilePath;
+      // Créer un fichier temporaire
+      const tempFilePath = path.join(os.tmpdir(), `audio-${Date.now()}.mp3`);
 
       try {
-        if (input.audioUri.startsWith("data:")) {
-          // Handle base64 data URI
-          const base64Data = input.audioUri.split(",")[1];
-          const buffer = Buffer.from(base64Data, "base64");
+        // Écrire le fichier audio dans un fichier temporaire
+        const buffer = Buffer.from(await input.audioFile.arrayBuffer());
+        fs.writeFileSync(tempFilePath, buffer);
 
-          // Create a temporary file
-          tempFilePath = path.join(os.tmpdir(), `audio-${Date.now()}.m4a`);
-          fs.writeFileSync(tempFilePath, buffer);
-          audioFile = fs.createReadStream(tempFilePath);
-        } else if (input.audioUri.startsWith("file://")) {
-          // Handle local file URI
-          const filePath = input.audioUri.replace("file://", "");
-          audioFile = fs.createReadStream(filePath);
-        } else {
-          throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: "Unsupported audio URI format",
-          });
-        }
+        // Créer un stream de lecture
+        const audioStream = fs.createReadStream(tempFilePath);
 
-        // Call OpenAI's API
+        // Appeler l'API OpenAI
         const transcription = await openai.audio.transcriptions.create({
-          file: audioFile,
+          file: audioStream,
           model: "whisper-1",
           language: input.language,
           prompt: input.prompt,
         });
 
         return {
+          success: true,
           text: transcription.text,
-          language: input.language || "en",
+          language: input.language || "fr",
         };
       } finally {
-        // Clean up temporary file if it was created
-        if (tempFilePath && fs.existsSync(tempFilePath)) {
-          try {
-            fs.unlinkSync(tempFilePath);
-          } catch (error) {
-            console.error("Error cleaning up temporary file:", error);
-          }
+        // Nettoyer le fichier temporaire
+        if (fs.existsSync(tempFilePath)) {
+          fs.unlinkSync(tempFilePath);
         }
       }
     } catch (error) {
-      console.error("Error in transcribe procedure:", error);
-
-      if (error instanceof TRPCError) {
-        throw error;
-      }
-
+      console.error("Erreur lors de la transcription:", error);
       throw new TRPCError({
         code: "INTERNAL_SERVER_ERROR",
-        message:
-          error instanceof Error ? error.message : "Failed to transcribe audio",
+        message: "Échec de la transcription audio",
         cause: error,
       });
     }
