@@ -35,7 +35,7 @@ console.log(
 );
 console.log(
   `\x1b[34m%s\x1b[0m`,
-  `📡 L'API sera disponible à l'adresse suivante http://localhost:${port}/api/trpc`
+  `📡 L'API est disponible à l'adresse suivante http://localhost:${port}/api/trpc`
 );
 
 serve({

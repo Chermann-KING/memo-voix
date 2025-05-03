@@ -1,5 +1,3 @@
-import { TRPCError } from "@trpc/server";
-
 // Define the context type
 export type TRPCContext = {
   user: {

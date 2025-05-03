@@ -1,5 +1,5 @@
 // @ts-nocheck
-import Hono from "hono";
+import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { trpcServer } from "@hono/trpc-server";
 import { appRouter } from "./trpc/app-router";
