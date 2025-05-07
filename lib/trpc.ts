@@ -6,15 +6,9 @@ import { Platform } from "react-native";
 // Get the base URL for the API
 const getBaseUrl = () => {
   // For mobile development, use the local IP address
-  // On android, use the environment variable if defined, otherwise use the host machine ip
-  if (Platform.OS === "android") {
-    // Use the actual IP address of the computer for physical Android devices
-    return process.env.BACKEND_URL || "http://10.0.2.2:3000";
-  }
-  if (Platform.OS === "ios") {
-    // Use localhost for iOS simulator
-    // Use the environment variable if defined, otherwise use localhost
-    return process.env.BACKEND_URL || "http://localhost:3000";
+  if (Platform.OS === "android" || Platform.OS === "ios") {
+    // Use the local IP address for mobile devices
+    return "http://192.168.1.48:3000";
   }
 
   // For web development
@@ -36,25 +30,25 @@ export const trpcClient = createTRPCClient<AppRouter>({
       url: `${getBaseUrl()}/api/trpc`,
       // Add fetch options to help with debugging
       fetch: async (url, options) => {
-        console.log(`Making tRPC request to: ${url}`);
+        console.log(`Envoi d'une requête tRPC à: ${url}`);
         try {
           const response = await fetch(url, options);
 
           // Log response status for debugging
-          console.log(`tRPC response status: ${response.status}`);
+          console.log(`Statut de la réponse tRPC: ${response.status}`);
 
           // Clone the response to log its content without consuming it
           const responseClone = response.clone();
           try {
             const responseData = await responseClone.json();
-            console.log("tRPC response data:", responseData);
+            console.log("Données de réponse tRPC:", responseData);
           } catch (e) {
-            console.log("Could not parse tRPC response as JSON");
+            console.log("Impossible d'analyser la réponse tRPC en JSON");
           }
 
           return response;
         } catch (error) {
-          console.error("tRPC fetch error:", error);
+          console.error("Erreur de recherche tRPC:", error);
           throw error;
         }
       },
