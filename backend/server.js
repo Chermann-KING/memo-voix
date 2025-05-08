@@ -41,6 +41,7 @@ console.log(
 serve({
   fetch: app.fetch,
   port: Number(port),
+  hostname: "0.0.0.0",
 });
 
 console.log(
