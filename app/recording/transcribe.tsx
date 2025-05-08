@@ -178,11 +178,10 @@ export default function TranscribeScreen() {
     try {
       console.log("Starting transcription for recording:", recording.id);
 
-      // Check backend status before attempting transcription
-      await checkBackendStatus();
-
-      // Call the transcribeAudio function with the recording URI
-      const result = await transcribeAudio(recording.uri, { language: "en" }); // Default to English
+      // Appel direct de la fonction transcribeAudio sans vérifier le backend
+      const result = await transcribeAudio(recording.uri, {
+        language: "fr",
+      });
 
       console.log("Transcription completed successfully");
       setTranscription(result);

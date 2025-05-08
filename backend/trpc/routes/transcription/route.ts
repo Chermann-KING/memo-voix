@@ -37,9 +37,30 @@ export const transcribeProcedure = protectedProcedure
       const tempFilePath = path.join(os.tmpdir(), `audio-${Date.now()}.mp3`);
 
       try {
-        // Écrire le fichier audio dans un fichier temporaire
-        const buffer = Buffer.from(await input.audioFile.arrayBuffer());
-        fs.writeFileSync(tempFilePath, buffer);
+        // Accepter différents formats d'entrée (Blob ou chemin de fichier)
+        if (typeof input.audioFile === "string") {
+          // Si c'est un chemin de fichier, le copier
+          if (fs.existsSync(input.audioFile)) {
+            fs.copyFileSync(input.audioFile, tempFilePath);
+          } else {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Fichier audio introuvable",
+            });
+          }
+        } else if (
+          input.audioFile instanceof Blob ||
+          (input.audioFile && typeof input.audioFile.arrayBuffer === "function")
+        ) {
+          // Si c'est un Blob ou un objet avec arrayBuffer(), l'utiliser
+          const buffer = Buffer.from(await input.audioFile.arrayBuffer());
+          fs.writeFileSync(tempFilePath, buffer);
+        } else {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Format de fichier audio non pris en charge",
+          });
+        }
 
         // Créer un stream de lecture
         const audioStream = fs.createReadStream(tempFilePath);

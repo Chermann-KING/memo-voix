@@ -1,14 +1,12 @@
 import { Platform } from "react-native";
 import * as FileSystem from "expo-file-system";
-import { trpcClient, checkBackendConnection } from "@/lib/trpc";
+import { trpcClient } from "@/lib/trpc";
 
 /**
- * Checks if a file exists (platform-safe)
+ * Vérifie si un fichier existe (compatible multi-plateformes)
  */
 const fileExists = async (fileUri: string): Promise<boolean> => {
   if (Platform.OS === "web") {
-    // On web, we can't check if a file exists using FileSystem
-    // Just return true and handle errors when trying to use the file
     return true;
   }
 
@@ -22,10 +20,10 @@ const fileExists = async (fileUri: string): Promise<boolean> => {
 };
 
 /**
- * Transcribes an audio file to text using OpenAI's Whisper API
- * @param audioUri URI of the audio file to transcribe
- * @param options Optional parameters for transcription
- * @returns Transcribed text
+ * Transcrit un fichier audio en texte en utilisant le backend (tRPC)
+ * @param audioUri URI du fichier audio à transcrire
+ * @param options Paramètres optionnels pour la transcription
+ * @returns Texte transcrit
  */
 export const transcribeAudio = async (
   audioUri: string,
@@ -34,22 +32,16 @@ export const transcribeAudio = async (
   try {
     console.log("Transcription audio:", audioUri);
 
-    // Check if the file exists (platform-safe)
+    // Vérifier si le fichier existe
     const exists = await fileExists(audioUri);
     if (!exists && Platform.OS !== "web") {
       throw new Error(`Le fichier n'existe pas: ${audioUri}`);
     }
 
-    // Check if the backend is running
-    const isBackendRunning = await checkBackendConnection();
-    if (!isBackendRunning) {
-      throw new Error("Le serveur backend ne fonctionne pas");
-    }
-
-    console.log("Appel de la procédure de transcription tRPC");
+    // Envoyer le fichier audio au backend via tRPC
     const result = await trpcClient.transcription.transcribe.mutate({
       audioFile: audioUri,
-      language: options?.language,
+      language: options?.language || "fr",
       prompt: options?.prompt,
     });
     return result.text;
@@ -57,4 +49,21 @@ export const transcribeAudio = async (
     console.error("Erreur de transcription audio:", error);
     throw error;
   }
+};
+
+/**
+ * Fonction pour générer des transcriptions de test (utilisé pendant le développement ou en cas d'erreur)
+ */
+export const getMockTranscription = (): string => {
+  const mockTranscriptions = [
+    "Voici la transcription de test pour les notes vocales. Cette fonction est utilisée pour le développement et le test de l'interface utilisateur sans appeler l'API réelle.",
+    "Bonjour, ceci est un enregistrement de test. Nous travaillons sur une application de mémo vocal avec transcription automatique.",
+    "N'oubliez pas de faire les courses ce weekend. Il faut acheter du pain, du lait et des fruits pour le petit déjeuner de demain.",
+    "Points importants pour la réunion de demain: présenter les nouveaux objectifs, discuter du budget et planifier les prochaines étapes du projet.",
+    "Idée pour l'amélioration de l'application: ajouter une fonction de partage direct vers les applications de messagerie et réseaux sociaux.",
+  ];
+
+  // Sélection aléatoire d'une transcription
+  const randomIndex = Math.floor(Math.random() * mockTranscriptions.length);
+  return mockTranscriptions[randomIndex];
 };
